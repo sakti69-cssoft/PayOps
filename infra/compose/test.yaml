@@ -1,0 +1,89 @@
+name: payops-test
+x-app: &app
+  build: { context: ../.. }
+  init: true
+  environment: &environment
+    DATABASE_URL: postgresql://payops_app:test-app-password@database:5432/payops_test_core
+    JWT_SECRET: test-jwt-secret-at-least-thirty-two-characters
+    MQTT_URL: mqtt://broker:1883
+    MQTT_USERNAME: worker
+    MQTT_PASSWORD: test-worker-password
+    DEVICE_ID: 00000000-0000-4000-8000-000000000001
+    DEVICE_KEY: test-device-signing-secret-at-least-thirty-two
+    API_URL: http://api:3000
+    COMMAND_TTL_MS: 180000
+    LEASE_MS: 3000
+    PUBLISH_TIMEOUT_MS: 1000
+    MAX_ATTEMPTS: 12
+    NODE_ENV: test
+    FAULT_TEST: 1
+  depends_on:
+    {
+      seed: { condition: service_completed_successfully },
+      broker: { condition: service_started },
+    }
+services:
+  database:
+    image: postgres:17.6-bookworm
+    environment:
+      {
+        POSTGRES_USER: payops,
+        POSTGRES_PASSWORD: test-only-local,
+        POSTGRES_DB: payops_test_core,
+      }
+    ports: ['127.0.0.1:${TEST_PG_PORT:-55432}:5432']
+    volumes: ['test-postgres:/var/lib/postgresql/data']
+    healthcheck:
+      {
+        test: ['CMD-SHELL', 'pg_isready -U payops -d payops_test_core'],
+        interval: 2s,
+        timeout: 2s,
+        retries: 30,
+      }
+  broker:
+    image: eclipse-mosquitto:2.0.22
+    ports: ['127.0.0.1:${TEST_MQTT_PORT:-51883}:1883']
+    volumes:
+      [
+        '../mosquitto:/mosquitto/config:ro',
+        'test-auth:/mosquitto/auth',
+        'test-broker:/mosquitto/data',
+      ]
+    entrypoint: ['/bin/sh', '-ec']
+    command:
+      [
+        'printf "worker:test-worker-password\n00000000-0000-4000-8000-000000000001:test-device-password\n" > /mosquitto/auth/passwords; mosquitto_passwd -U /mosquitto/auth/passwords; chown -R mosquitto:mosquitto /mosquitto/auth; exec mosquitto -c /mosquitto/config/mosquitto.conf',
+      ]
+  seed:
+    build: { context: ../.. }
+    environment:
+      MIGRATION_DATABASE_URL: postgresql://payops:test-only-local@database:5432/payops_test_core
+      SEED_PASSWORD: test-login-password
+      APP_PASSWORD: test-app-password
+      DEVICE_KEY: test-device-signing-secret-at-least-thirty-two
+    depends_on: { database: { condition: service_healthy } }
+    command: ['sh', '-c', 'npm run migrate && npm run seed']
+  api:
+    <<: *app
+    ports: ['127.0.0.1:${TEST_API_PORT:-53000}:3000']
+    command: ['npm', 'run', 'api']
+  worker:
+    <<: *app
+    environment:
+      <<: *environment
+      FAULT_POINT: '${WORKER_FAULT_POINT:-}'
+    command: ['npm', 'run', 'worker']
+  simulator:
+    <<: *app
+    environment:
+      <<: *environment
+      MQTT_PASSWORD: test-device-password
+      SIMULATOR_DB: /app/.runtime/simulator.db
+      FAULT_POINT: '${SIMULATOR_FAULT_POINT:-}'
+    command: ['npm', 'run', 'simulator']
+    volumes: ['test-simulator:/app/.runtime']
+volumes:
+  test-postgres:
+  test-auth:
+  test-broker:
+  test-simulator:

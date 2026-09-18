@@ -1,0 +1,140 @@
+name: payops
+x-app: &app
+  build: .
+  env_file: .env
+  init: true
+  restart: unless-stopped
+  environment: &environment
+    DATABASE_URL: postgresql://payops_app:${APP_PASSWORD}@database:5432/payops
+    MQTT_URL: mqtt://broker:1883
+    API_URL: http://api:3000
+  depends_on:
+    seed: { condition: service_completed_successfully }
+    broker: { condition: service_started }
+services:
+  database:
+    image: postgres:17.6-bookworm
+    environment:
+      {
+        POSTGRES_USER: payops,
+        POSTGRES_DB: payops,
+        POSTGRES_PASSWORD: '${POSTGRES_PASSWORD}',
+      }
+    ports: ['127.0.0.1:5432:5432']
+    volumes: ['postgres-data:/var/lib/postgresql/data']
+    healthcheck:
+      {
+        test: ['CMD-SHELL', 'pg_isready -U payops -d payops'],
+        interval: 3s,
+        timeout: 3s,
+        retries: 30,
+      }
+    restart: unless-stopped
+  broker-init:
+    image: eclipse-mosquitto:2.0.22
+    user: root
+    environment:
+      {
+        MQTT_PASSWORD: '${MQTT_PASSWORD}',
+        DEVICE_MQTT_PASSWORD: '${DEVICE_MQTT_PASSWORD}',
+      }
+    entrypoint: ['/bin/sh', '-ec']
+    command:
+      [
+        'umask 077; printf "worker:%s\n00000000-0000-4000-8000-000000000001:%s\n" "$$MQTT_PASSWORD" "$$DEVICE_MQTT_PASSWORD" > /auth/passwords; mosquitto_passwd -U /auth/passwords; chown -R 1883:1883 /auth',
+      ]
+    volumes: ['broker-auth:/auth']
+  broker:
+    image: eclipse-mosquitto:2.0.22
+    depends_on: { broker-init: { condition: service_completed_successfully } }
+    ports: ['127.0.0.1:1883:1883']
+    volumes:
+      [
+        'broker-data:/mosquitto/data',
+        'broker-auth:/mosquitto/auth:ro',
+        './infra/mosquitto:/mosquitto/config:ro',
+      ]
+    restart: unless-stopped
+  seed:
+    build: .
+    env_file: .env
+    environment:
+      {
+        MIGRATION_DATABASE_URL: 'postgresql://payops:${POSTGRES_PASSWORD}@database:5432/payops',
+      }
+    depends_on: { database: { condition: service_healthy } }
+    command: ['sh', '-c', 'npm run migrate && npm run seed']
+  api:
+    <<: *app
+    ports: ['127.0.0.1:3000:3000']
+    command: ['npm', 'run', 'api']
+    healthcheck:
+      {
+        test:
+          [
+            'CMD',
+            'node',
+            '-e',
+            'fetch("http://localhost:3000/health/live").then(r=>process.exit(r.ok?0:1))',
+          ],
+        interval: 10s,
+        timeout: 5s,
+        retries: 5,
+      }
+  worker:
+    <<: *app
+    command: ['npm', 'run', 'worker']
+    healthcheck:
+      {
+        test:
+          [
+            'CMD',
+            'node',
+            '-e',
+            'fetch("http://localhost:3001/health").then(r=>process.exit(r.ok?0:1))',
+          ],
+        interval: 10s,
+        timeout: 5s,
+        retries: 5,
+      }
+  simulator:
+    <<: *app
+    environment:
+      <<: *environment
+      MQTT_PASSWORD: '${DEVICE_MQTT_PASSWORD}'
+      SIMULATOR_DB: /app/.runtime/simulator.db
+    command: ['npm', 'run', 'simulator']
+    volumes: ['simulator-data:/app/.runtime']
+  dashboard:
+    <<: *app
+    environment:
+      <<: *environment
+      DASHBOARD_API: http://api:3000
+    ports: ['127.0.0.1:5173:5173']
+    command: ['npm', 'run', 'dashboard']
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: [monitoring]
+    volumes:
+      ['./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro']
+    ports: ['127.0.0.1:9090:9090']
+  grafana:
+    image: grafana/grafana:12.1.1
+    profiles: [monitoring]
+    environment:
+      {
+        GF_SECURITY_ADMIN_PASSWORD: '${SEED_PASSWORD}',
+        GF_USERS_ALLOW_SIGN_UP: 'false',
+      }
+    ports: ['127.0.0.1:3002:3000']
+    volumes:
+      [
+        'grafana-data:/var/lib/grafana',
+        './infra/monitoring/grafana:/etc/grafana/provisioning:ro',
+      ]
+volumes:
+  postgres-data:
+  broker-data:
+  broker-auth:
+  simulator-data:
+  grafana-data:

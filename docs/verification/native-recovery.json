@@ -1,0 +1,62 @@
+{
+  "mode": "native processes; not container verification",
+  "database": "payops_test_recovery_1789619990408",
+  "results": [
+    {
+      "scenario": "baseline verified round trip",
+      "passed": true,
+      "durationMs": 846
+    },
+    {
+      "scenario": "broker killed and restarted",
+      "passed": true,
+      "durationMs": 2545
+    },
+    {
+      "scenario": "worker-after-claim",
+      "passed": true,
+      "durationMs": 8502
+    },
+    {
+      "scenario": "worker-after-publish",
+      "passed": true,
+      "durationMs": 6400
+    },
+    {
+      "scenario": "simulator-before-processing",
+      "passed": true,
+      "durationMs": 5072
+    },
+    {
+      "scenario": "simulator-before-commit",
+      "passed": true,
+      "durationMs": 4591
+    },
+    {
+      "scenario": "simulator-after-completion",
+      "passed": true,
+      "durationMs": 4100
+    },
+    {
+      "scenario": "simulator-before-ack",
+      "passed": true,
+      "durationMs": 2993
+    },
+    {
+      "scenario": "API offline after durable simulated completion",
+      "passed": true,
+      "durationMs": 5117
+    },
+    {
+      "scenario": "database connections terminated and recovered",
+      "passed": true,
+      "durationMs": 1365
+    },
+    {
+      "scenario": "bounded backlog of 30 payments",
+      "passed": true,
+      "durationMs": 5439
+    }
+  ],
+  "complete": true
+}
