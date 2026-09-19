@@ -38,8 +38,8 @@
 
 ## Blockers and remaining work
 
-- Docker Desktop starts, but engine requests return HTTP 500; backend cannot reach `192.168.65.7:2376` (`no route to host`). WSL shell failed with `Wsl/Service/0x8007274c`.
-- `npm run integration` attempted an isolated Compose project and failed before container startup. Container builds, container fault suite and container backup/restore demonstration are not verified.
+- Docker/WSL startup blocker repaired on 19 September 2026: restarted the stuck WSL service, preserved and replaced orphaned Docker runtime socket directories, and disabled the optional Docker AI setting. Configuration and runtime backups remain in their original parent directories. WSL responds; Docker Engine 29.8.0 responds; `docker run --rm hello-world` passed. Existing containers and volumes remain listed; their application data has not been audited.
+- After repair, `npm run integration` passed all 20 tests across 3 files against Docker-hosted PostgreSQL 17.6 and Mosquitto 2.0.22 (19 September 2026). Isolated project `payops-test-233a325e8e` was stopped and its test volumes preserved. Container application builds, container fault suite and container backup/restore demonstration remain unverified.
 - GenAI implementation remains deferred by the user's explicit Phase 10 reliability gate. It is visibly disabled; no mock or live provider result is fabricated.
 - Recovery reports, documentation and final local checks are complete. The implementation snapshot includes the lockfile; full project completion remains blocked by the items above.
 - An unrelated process already owns port 3000. It was preserved. Native preview uses API 53009 and dashboard 5174.
