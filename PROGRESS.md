@@ -36,10 +36,14 @@
 - Browser login and live merchant overview verified using the PostgreSQL-backed API.
 - Native recovery suite completed: **11/11 scenarios passed**, including broker restart, worker and simulator crash boundaries, lost receipt acknowledgment, database connection termination and 30-payment backlog drain. Exact report copied into docs/verification/native-recovery.json; runtime resources retained.
 
-## Blockers and remaining work
+## Latest verification and limitations
 
 - Docker/WSL startup blocker repaired on 19 September 2026: restarted the stuck WSL service, preserved and replaced orphaned Docker runtime socket directories, and disabled the optional Docker AI setting. Configuration and runtime backups remain in their original parent directories. WSL responds; Docker Engine 29.8.0 responds; `docker run --rm hello-world` passed. Existing containers and volumes remain listed; their application data has not been audited.
-- After repair, `npm run integration` passed all 20 tests across 3 files against Docker-hosted PostgreSQL 17.6 and Mosquitto 2.0.22 (19 September 2026). Isolated project `payops-test-233a325e8e` was stopped and its test volumes preserved. Container application builds, container fault suite and container backup/restore demonstration remain unverified.
-- GenAI implementation remains deferred by the user's explicit Phase 10 reliability gate. It is visibly disabled; no mock or live provider result is fabricated.
-- Recovery reports, documentation and final local checks are complete. The implementation snapshot includes the lockfile; full project completion remains blocked by the items above.
-- An unrelated process already owns port 3000. It was preserved. Native preview uses API 53009 and dashboard 5174.
+- After repair, `npm run integration` initially passed all 20 tests across 3 files against Docker-hosted PostgreSQL 17.6 and Mosquitto 2.0.22 (19 September 2026). Isolated project `payops-test-233a325e8e` was stopped and its test volumes preserved. Container builds and recovery/restore tests subsequently passed.
+- Phase 10 gate cleared by the initial Docker run: 17/17 scenarios passed, including process/dependency recovery and separate database restore. Exact report: docs/verification/container-recovery-initial.json.
+- Implemented read-only investigation after that gate: deterministic labeled mock, bounded OpenAI adapter, merchant-scoped evidence, constrained cited observations, explicit hypotheses/missing data, durable budgets/audit, and a dashboard panel. Live OpenAI execution remains unverified without credentials.
+- New checks passed: 16 unit tests and 25 Docker-backed integration tests; typecheck, lint, formatting and dashboard build passed. Strengthened **18/18 container scenarios passed**, including exact crash markers, simulator effect counts, the complete broker-recovery-to-investigation demonstration and content-digest backup comparison. Exact report: docs/verification/container-recovery.json. All test volumes retained.
+- Added PayOps to GitHub Desktop. The app was previously showing FinCore_Digital_Banking; that unrelated repository was preserved. The repository now has origin https://github.com/sakti69-cssoft/PayOps.git; final changes are ready to push.
+- Normal Compose startup verified, with API port 53009 preserving the unrelated application on port 3000. Fixed dashboard cache permissions for the non-root container user. Browser login, completed synthetic payment overview, mock investigation label, and evidence citations were visually verified.
+- Documented backup/restore commands executed successfully. Separate database payops_restore_1789832818880 matched all payment, command, receipt and incident-evidence row counts and content digests. Backup files and restored data retained.
+- Local Compose dashboard: http://localhost:5173. API: http://localhost:53009. The earlier native diagnostic preview used dashboard port 5174.

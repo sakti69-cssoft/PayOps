@@ -8,6 +8,14 @@ import { rateLimit } from 'express-rate-limit';
 import { z, ZodError } from 'zod';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from '../../packages/database/index.js';
+import { transaction } from '../../packages/database/index.js';
+import {
+  investigate,
+  MockProvider,
+  OpenAIProvider,
+  type InvestigationProvider,
+  type Evidence,
+} from '../../packages/investigation/index.js';
 import type { Config } from '../../packages/config.js';
 import { evidenceMessage, type Role } from '../../packages/contracts/index.js';
 import {
@@ -22,8 +30,15 @@ import {
   receiveEvidence,
   replay,
 } from './service.js';
-export function createApp(pool: Pool, config: Config) {
+export function createApp(
+  pool: Pool,
+  config: Config,
+  provider: InvestigationProvider = config.GENAI_PROVIDER === 'openai'
+    ? new OpenAIProvider(config)
+    : new MockProvider(),
+) {
   const app = express();
+  let activeInvestigations = 0;
   app.disable('x-powered-by');
   app.use(helmet());
   app.use((_req, res, next) => {
@@ -260,6 +275,76 @@ export function createApp(pool: Pool, config: Config) {
         z.uuid().parse(req.params.id),
       ),
     );
+  });
+  app.post(base + '/incidents/:id/investigation', async (req, res) => {
+    const id = z.uuid().parse(req.params.id);
+    z.object({}).strict().parse(req.body);
+    if (activeInvestigations >= 2)
+      throw new HttpError(429, 'Investigation busy; retry later');
+    activeInvestigations++;
+    let reserved = false;
+    const userId = res.locals.userId as string,
+      merchantId = res.locals.merchantId as string;
+    try {
+      const evidence = await transaction(pool, async (c) => {
+        const incident = await c.query(
+          'SELECT id FROM incidents WHERE id=$1 AND merchant_id=$2',
+          [id, merchantId],
+        );
+        if (!incident.rowCount) throw new HttpError(404, 'Incident not found');
+        await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+          `investigation:${userId}`,
+        ]);
+        const usage = await c.query(
+          "SELECT count(*)::int AS n FROM audit_events WHERE user_id=$1 AND action='investigation.requested' AND created_at>now()-interval '1 hour'",
+          [userId],
+        );
+        if (usage.rows[0].n >= 10)
+          throw new HttpError(429, 'Hourly investigation limit reached');
+        const snapshots = await c.query(
+          'SELECT e.id,e.captured_at,e.snapshot FROM incident_evidence e JOIN incidents i ON i.id=e.incident_id WHERE i.id=$1 AND i.merchant_id=$2 ORDER BY e.captured_at DESC,e.id LIMIT 10',
+          [id, merchantId],
+        );
+        await c.query(
+          "INSERT INTO audit_events(merchant_id,user_id,action,resource_id,detail) VALUES($1,$2,'investigation.requested',$3,$4)",
+          [
+            merchantId,
+            userId,
+            id,
+            {
+              provider: provider.mode,
+              evidenceIds: snapshots.rows.map((e) => e.id),
+            },
+          ],
+        );
+        return snapshots.rows as Evidence[];
+      });
+      reserved = true;
+      const result = await investigate(evidence, provider);
+      await pool.query(
+        "INSERT INTO audit_events(merchant_id,user_id,action,resource_id,detail) VALUES($1,$2,'investigation.completed',$3,$4)",
+        [
+          merchantId,
+          userId,
+          id,
+          { provider: provider.mode, evidenceIds: evidence.map((e) => e.id) },
+        ],
+      );
+      res.json({ incidentId: id, ...result });
+    } catch (error) {
+      if (reserved)
+        await pool.query(
+          "INSERT INTO audit_events(merchant_id,user_id,action,resource_id,detail) VALUES($1,$2,'investigation.failed',$3,$4)",
+          [merchantId, userId, id, { provider: provider.mode }],
+        );
+      if (error instanceof HttpError) throw error;
+      throw new HttpError(
+        503,
+        'Investigation unavailable; incident evidence is still available',
+      );
+    } finally {
+      activeInvestigations--;
+    }
   });
   app.get(base + '/audit', async (req, res) => {
     const p = page(req);

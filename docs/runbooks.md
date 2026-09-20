@@ -2,7 +2,7 @@
 
 ## Startup troubleshooting
 
-1. `docker info` must succeed. On this implementation host, Docker Desktop starts but its backend has `connect tcp 192.168.65.7:2376: no route to host`; WSL returns `Wsl/Service/0x8007274c`. This is an external runtime blocker. Do not reset Docker, unregister WSL distributions or delete volumes to work around it automatically.
+1. `docker info` must succeed. This host's WSL hang and orphaned Docker socket startup failures were repaired on 19 September 2026. The repair preserved runtime folders, restarted WSL and disabled optional Docker AI. If startup fails again, inspect current logs before changing anything; do not factory reset, unregister distributions or delete volumes automatically.
 2. `docker compose config --quiet` validates configuration without starting services.
 3. Inspect `docker compose logs seed`: migrations must complete and checksum verification must pass.
 4. Inspect API readiness and worker logs. Liveness alone does not mean dispatch is progressing.
@@ -10,7 +10,7 @@
 
 ## Broker outage and recovery demonstration
 
-Use the isolated `npm run test:fault` suite; its broker outage scenario accepts a payment while the test broker is stopped, verifies durable noncompletion, restarts the broker, and waits for verified completion. It never stops the development broker. Run `npm run demo` for a normal synthetic payment in the development stack. The full GenAI summary step remains blocked until reliability verification permits Phase 10.
+Use the isolated `npm run test:fault` suite; its broker outage scenario accepts a payment while the test broker is stopped, verifies durable noncompletion, waits for persisted incident evidence, restarts the broker, and waits for verified completion. It then authenticates and generates a read-only mock investigation with validated citations. It never stops the development broker. Run `npm run demo` for a normal synthetic payment in the development stack, then use Investigation in the dashboard for any captured incident.
 
 ## Replay
 
@@ -18,7 +18,7 @@ Inspect command expiry, receipt references, attempts and immutable incident evid
 
 ## Backup / separate restore
 
-`npm run backup` writes a custom-format dump directly to a file using a process pipe (safe for binary output on PowerShell). `npm run restore -- backups/<file>.dump` creates `payops_restore_<timestamp>`, then restores with exit-on-error. It does not overwrite, drop or switch the original database. Verify payment/command/receipt/evidence counts and migration checksums, then perform a synthetic round trip against the restored database before any deliberate cutover. The fault suite contains a separate-database restoration scenario but its execution is pending.
+`npm run backup` writes a custom-format dump directly to a file using a process pipe (safe for binary output on PowerShell). `npm run restore -- backups/<file>.dump` creates `payops_restore_<timestamp>`, then restores with exit-on-error. It does not overwrite, drop or switch the original database. Verify payment/command/receipt/evidence counts and migration checksums, then perform a synthetic round trip against the restored database before any deliberate cutover. The initial container recovery suite successfully restored payment and evidence rows into a separate database; the strengthened suite compares counts and content digests while test writers are stopped.
 
 ## Migration / rollback
 

@@ -58,5 +58,5 @@ const duration = await until(async () => {
   return detail.state === 'completed';
 }, 60000);
 console.log(
-  `Verified synthetic completion after ${duration}ms. Run the isolated fault suite for broker interruption; investigation remains gated on reliability verification.`,
+  `Verified synthetic completion after ${duration}ms. Run the isolated fault suite for broker interruption and a cited mock investigation, or inspect an incident in the dashboard.`,
 );

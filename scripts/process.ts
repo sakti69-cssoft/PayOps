@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 export async function run(
   command: string,
   args: string[],
@@ -12,7 +12,13 @@ export async function run(
     });
     let output = '';
     const timer = setTimeout(() => {
-      child.kill();
+      if (process.platform === 'win32' && child.pid) {
+        spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
+          windowsHide: true,
+          stdio: 'ignore',
+          timeout: 10000,
+        });
+      } else child.kill();
       reject(new Error(`${command} timed out`));
     }, options.timeout ?? 120000);
     child.stdout.on('data', (b) => {

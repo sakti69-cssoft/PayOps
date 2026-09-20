@@ -1,0 +1,109 @@
+{
+  "project": "payops-test-2bcee3ce7e",
+  "endedAt": "2026-09-19T02:33:23.581Z",
+  "results": [
+    {
+      "scenario": "baseline",
+      "invariant": "Accepted work receives verified device completion",
+      "recoveryMs": 1174,
+      "passed": true
+    },
+    {
+      "scenario": "api-before-commit",
+      "invariant": "A killed API leaves zero or one complete acceptance; same-key retry never duplicates",
+      "recoveryMs": 4764,
+      "passed": true
+    },
+    {
+      "scenario": "api-after-commit",
+      "invariant": "A killed API leaves zero or one complete acceptance; same-key retry never duplicates",
+      "recoveryMs": 3413,
+      "passed": true
+    },
+    {
+      "scenario": "broker outage and restart",
+      "invariant": "Accepted payment remains durable without false device completion; recovers on broker return",
+      "recoveryMs": 8431,
+      "passed": true
+    },
+    {
+      "scenario": "worker-after-claim",
+      "invariant": "Abandoned leases recover with the same logical command and at most one synthetic effect",
+      "recoveryMs": 12650,
+      "passed": true
+    },
+    {
+      "scenario": "worker-after-publish",
+      "invariant": "Abandoned leases recover with the same logical command and at most one synthetic effect",
+      "recoveryMs": 10905,
+      "passed": true
+    },
+    {
+      "scenario": "simulator-before-processing",
+      "invariant": "Simulator restart preserves deduplication and retries original signed completion evidence",
+      "recoveryMs": 9012,
+      "passed": true
+    },
+    {
+      "scenario": "simulator-before-commit",
+      "invariant": "Simulator restart preserves deduplication and retries original signed completion evidence",
+      "recoveryMs": 9158,
+      "passed": true
+    },
+    {
+      "scenario": "simulator-after-completion",
+      "invariant": "Simulator restart preserves deduplication and retries original signed completion evidence",
+      "recoveryMs": 10391,
+      "passed": true
+    },
+    {
+      "scenario": "simulator-before-ack",
+      "invariant": "Simulator restart preserves deduplication and retries original signed completion evidence",
+      "recoveryMs": 7879,
+      "passed": true
+    },
+    {
+      "scenario": "database outage",
+      "invariant": "Processes reconnect after database restart without losing accepted work",
+      "recoveryMs": 13615,
+      "passed": true
+    },
+    {
+      "scenario": "stale leases and competing claimers",
+      "invariant": "Lease token fences an old publisher after another worker owns the claim",
+      "recoveryMs": 7154,
+      "passed": true
+    },
+    {
+      "scenario": "poison command and audited replay",
+      "invariant": "Malformed payload is terminal; a corrected replay preserves the command ID",
+      "recoveryMs": 6958,
+      "passed": true
+    },
+    {
+      "scenario": "retry exhaustion and replay",
+      "invariant": "Exhaustion is explicit and never fabricated completion",
+      "recoveryMs": 12104,
+      "passed": true
+    },
+    {
+      "scenario": "duplicate delayed contradictory receipts",
+      "invariant": "Valid retransmissions are idempotent and contradictory late evidence cannot regress completion",
+      "recoveryMs": 610,
+      "passed": true
+    },
+    {
+      "scenario": "backlog and bounded drain",
+      "invariant": "A burst of 60 accepted payments drains without duplicate logical commands",
+      "recoveryMs": 12303,
+      "passed": true
+    },
+    {
+      "scenario": "backup and separate restore",
+      "invariant": "A consistent dump restores payment and evidence rows to a new database",
+      "recoveryMs": 4506,
+      "passed": true
+    }
+  ],
+  "complete": true
+}

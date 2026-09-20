@@ -5,6 +5,8 @@ x-app: &app
   init: true
   restart: unless-stopped
   environment: &environment
+    PORT: 3000
+    WORKER_PORT: 3001
     DATABASE_URL: postgresql://payops_app:${APP_PASSWORD}@database:5432/payops
     MQTT_URL: mqtt://broker:1883
     API_URL: http://api:3000
@@ -66,7 +68,7 @@ services:
     command: ['sh', '-c', 'npm run migrate && npm run seed']
   api:
     <<: *app
-    ports: ['127.0.0.1:3000:3000']
+    ports: ['127.0.0.1:${API_PORT:-3000}:3000']
     command: ['npm', 'run', 'api']
     healthcheck:
       {
@@ -110,7 +112,7 @@ services:
     environment:
       <<: *environment
       DASHBOARD_API: http://api:3000
-    ports: ['127.0.0.1:5173:5173']
+    ports: ['127.0.0.1:${DASHBOARD_PORT:-5173}:5173']
     command: ['npm', 'run', 'dashboard']
   prometheus:
     image: prom/prometheus:v3.5.0

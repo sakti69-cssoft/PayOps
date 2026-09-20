@@ -32,6 +32,7 @@ const results: {
   passed: boolean;
   error?: string;
 }[] = [];
+let brokerIncidentId = '';
 function assert(value: unknown, message: string): asserts value {
   if (!value) throw new Error(message);
 }
@@ -82,6 +83,32 @@ async function completed(id: string) {
         ?.state === 'completed',
     60000,
   );
+  await docker([
+    'exec',
+    '-T',
+    'simulator',
+    'node',
+    '--input-type=module',
+    '-e',
+    "import {DatabaseSync} from 'node:sqlite'; const db=new DatabaseSync(process.env.SIMULATOR_DB,{readOnly:true}); const row=db.prepare('SELECT effect_count FROM inbox WHERE command_id=?').get(process.argv[1]); db.close(); if(row?.effect_count!==1)throw new Error('Missing or duplicate simulated effect');",
+    id,
+  ]);
+}
+async function crashed(service: string, point: string) {
+  await until(async () => {
+    const output = await docker(['ps', '--all', '--format', 'json', service]);
+    const rows = output
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as { State: string; ExitCode: number });
+    return rows.some((row) => row.State === 'exited' && row.ExitCode === 86);
+  }, 30000);
+  const logs = await docker(['logs', '--no-color', service]);
+  assert(
+    logs.includes(`"point":"${point}"`),
+    `Missing exact crash marker ${point}`,
+  );
 }
 async function restartWorker(point = '') {
   await docker(['up', '-d', '--no-deps', '--force-recreate', 'worker'], {
@@ -96,7 +123,14 @@ async function restartSimulator(point = '') {
   });
 }
 try {
-  await docker(['up', '-d', '--build', 'api', 'worker', 'simulator']);
+  // First-time image downloads and npm installation can exceed recovery deadlines.
+  await run(
+    'docker',
+    [...base, 'up', '-d', '--build', 'api', 'worker', 'simulator'],
+    {
+      timeout: 1200000,
+    },
+  );
   await until(async () => {
     await pool.query('SELECT 1 FROM payments LIMIT 1');
     return (
@@ -189,8 +223,65 @@ try {
           .rows[0].state !== 'completed',
         'False completion while broker is stopped',
       );
+      await until(async () => {
+        const incident = await pool.query(
+          'SELECT id FROM incidents WHERE resource_id=$1 AND merchant_id=$2 ORDER BY opened_at LIMIT 1',
+          [c.id, merchant],
+        );
+        brokerIncidentId = incident.rows[0]?.id ?? '';
+        return Boolean(brokerIncidentId);
+      }, 30000);
       await docker(['start', 'broker']);
       await completed(c.id);
+    },
+  );
+  await scenario(
+    'read-only investigation after broker recovery',
+    'The authenticated assistant cites stored incident evidence without changing delivery state',
+    async () => {
+      const api = `http://localhost:${process.env.TEST_API_PORT ?? 53000}`;
+      const login = await fetch(`${api}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'admin@cedar.test',
+          password: 'test-login-password',
+        }),
+        signal: AbortSignal.timeout(5000),
+      });
+      assert(login.ok, 'Demo login failed');
+      const { token } = (await login.json()) as { token: string };
+      const response = await fetch(
+        `${api}/api/merchants/${merchant}/incidents/${brokerIncidentId}/investigation`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: '{}',
+          signal: AbortSignal.timeout(10000),
+        },
+      );
+      assert(response.ok, 'Investigation failed');
+      const result = (await response.json()) as {
+        mode: string;
+        facts: { evidenceId: string }[];
+      };
+      assert(
+        result.mode === 'mock' && result.facts.length > 0,
+        'Expected labeled mock evidence summary',
+      );
+      const evidence = await pool.query(
+        'SELECT id FROM incident_evidence WHERE incident_id=$1',
+        [brokerIncidentId],
+      );
+      assert(
+        result.facts.every((f) =>
+          evidence.rows.some((e) => e.id === f.evidenceId),
+        ),
+        'Invented evidence citation',
+      );
     },
   );
   for (const point of ['worker-after-claim', 'worker-after-publish'])
@@ -201,16 +292,7 @@ try {
         await docker(['stop', 'worker', 'simulator']);
         const c = await pay();
         await restartWorker(point);
-        await until(async () => {
-          const out = await docker([
-            'ps',
-            '--all',
-            '--format',
-            'json',
-            'worker',
-          ]);
-          return out.includes('exited');
-        }, 30000);
+        await crashed('worker', point);
         await restartWorker();
         await restartSimulator();
         await completed(c.id);
@@ -238,16 +320,7 @@ try {
         await docker(['stop', 'simulator']);
         const c = await pay();
         await restartSimulator(point);
-        await until(async () => {
-          const out = await docker([
-            'ps',
-            '--all',
-            '--format',
-            'json',
-            'simulator',
-          ]);
-          return out.includes('exited');
-        }, 30000);
+        await crashed('simulator', point);
         await restartSimulator();
         await completed(c.id);
         await until(
@@ -439,6 +512,7 @@ try {
     'backup and separate restore',
     'A consistent dump restores payment and evidence rows to a new database',
     async () => {
+      await docker(['stop', 'api', 'worker', 'simulator']);
       await docker([
         'exec',
         '-T',
@@ -480,19 +554,22 @@ try {
         url.replace('/payops_test_core', `/${target}`),
       );
       try {
-        assert(
-          (await restored.query('SELECT count(*)::int AS n FROM payments'))
-            .rows[0].n > 0,
-          'No restored payments',
-        );
-        assert(
-          (
-            await restored.query(
-              'SELECT count(*)::int AS n FROM incident_evidence',
-            )
-          ).rows[0].n > 0,
-          'No restored evidence',
-        );
+        for (const table of [
+          'payments',
+          'commands',
+          'receipts',
+          'incident_evidence',
+        ]) {
+          const query = `SELECT count(*)::int AS n, md5(COALESCE(jsonb_agg(to_jsonb(t) ORDER BY id)::text, '[]')) AS digest FROM ${table} t`;
+          const original = (await pool.query(query)).rows[0];
+          const copy = (await restored.query(query)).rows[0];
+          assert(
+            original.n > 0 &&
+              original.n === copy.n &&
+              original.digest === copy.digest,
+            `Restored ${table} differs from source`,
+          );
+        }
       } finally {
         await restored.end();
       }
@@ -510,7 +587,7 @@ try {
         project,
         endedAt: new Date().toISOString(),
         results,
-        complete: results.length >= 16 && results.every((r) => r.passed),
+        complete: results.length === 18 && results.every((r) => r.passed),
       },
       null,
       2,

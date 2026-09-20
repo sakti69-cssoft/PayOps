@@ -3,6 +3,14 @@ import { createRoot } from 'react-dom/client';
 import './style.css';
 type Row = Record<string, unknown>;
 type Merchant = { id: string; name: string; role: string };
+type Investigation = {
+  mode: string;
+  summary: string;
+  facts: { id: string; evidenceId: string; text: string }[];
+  hypotheses: { id: string; evidenceId: string; text: string }[];
+  missingInformation: string[];
+  operatorChecks: string[];
+};
 const label = (v: unknown) => (v === null || v === undefined ? '—' : String(v));
 const date = (v: unknown) =>
   v ? new Date(String(v)).toLocaleString() : 'Not received';
@@ -23,8 +31,13 @@ function App() {
     [detailType, setDetailType] = useState(''),
     [updated, setUpdated] = useState(''),
     [page, setPage] = useState(0);
+  const [investigation, setInvestigation] = useState<Investigation | null>(
+    null,
+  );
+  const [investigating, setInvestigating] = useState(false);
+  const [investigationError, setInvestigationError] = useState('');
   const activeScope = useRef('');
-  activeScope.current = `${token}:${merchant}:${page}`;
+  activeScope.current = `${token}:${merchant}:${page}:${tab}`;
   const request = useCallback(
     async (path: string, body?: unknown) => {
       const r = await fetch('/api' + path, {
@@ -73,6 +86,8 @@ function App() {
     setIncidents([]);
     setAudit([]);
     setDetail(null);
+    setInvestigation(null);
+    setInvestigationError('');
     setUpdated('');
     if (!token) {
       setMerchants([]);
@@ -114,11 +129,41 @@ function App() {
     }
   }
   async function inspect(kind: string, id: unknown) {
+    const scope = activeScope.current;
     try {
-      setDetail(await request(`/merchants/${merchant}/${kind}/${id}`));
+      const result = await request(`/merchants/${merchant}/${kind}/${id}`);
+      if (scope !== activeScope.current) return;
+      setDetail(result);
       setDetailType(kind);
+      setInvestigation(null);
+      setInvestigationError('');
     } catch (e) {
       setError((e as Error).message);
+    }
+  }
+  async function investigateIncident(id: unknown) {
+    const scope = activeScope.current;
+    setInvestigating(true);
+    setInvestigationError('');
+    setInvestigation(null);
+    try {
+      const evidence = await request(`/merchants/${merchant}/incidents/${id}`);
+      if (scope !== activeScope.current) return;
+      setDetail(evidence);
+      setDetailType('incidents');
+      const result = await request(
+        `/merchants/${merchant}/incidents/${id}/investigation`,
+        {},
+      );
+      if (scope !== activeScope.current) return;
+      setDetail(evidence);
+      setDetailType('incidents');
+      setInvestigation(result);
+    } catch (e) {
+      if (scope === activeScope.current)
+        setInvestigationError((e as Error).message);
+    } finally {
+      setInvestigating(false);
     }
   }
   async function replay(id: unknown) {
@@ -215,6 +260,8 @@ function App() {
           onChange={(e) => {
             setMerchant(e.target.value);
             setDetail(null);
+            setInvestigation(null);
+            setInvestigationError('');
             setPage(0);
           }}
         >
@@ -241,6 +288,8 @@ function App() {
                 setTab(t);
                 setPage(0);
                 setDetail(null);
+                setInvestigation(null);
+                setInvestigationError('');
               }}
             >
               <span>{['▦', '↗', '▣', '◉', '↻', '≡', '✧'][i]}</span>
@@ -487,12 +536,81 @@ function App() {
           {tab === 'Investigation' && (
             <article className="panel">
               <p className="eyebrow">READ-ONLY ASSISTANT</p>
-              <h2>Investigation is gated on reliability verification</h2>
+              <h2>Understand an incident</h2>
               <p>
-                The assistant will be enabled after the real PostgreSQL and MQTT
-                reliability suite passes. Incident evidence remains available in
-                the Incidents view.
+                Select an incident for cited observations, possible causes, and
+                operator checks. The assistant cannot replay payments or change
+                devices. Its configured mode appears with each result.
               </p>
+              {incidents.map((i) => (
+                <button
+                  className="incident"
+                  key={label(i.id)}
+                  disabled={investigating}
+                  onClick={() => void investigateIncident(i.id)}
+                >
+                  {label(i.kind).replaceAll('_', ' ')} · {date(i.opened_at)} →
+                  Investigate
+                </button>
+              ))}
+              {!incidents.length && (
+                <p>
+                  No incidents on this page. Evidence appears after an
+                  operational issue is detected.
+                </p>
+              )}
+              {investigating && <p role="status">Reviewing evidence…</p>}
+              {investigationError && (
+                <p role="alert" className="error">
+                  {investigationError}
+                </p>
+              )}
+              {investigation && (
+                <section aria-label="Investigation result">
+                  <p className="pill">
+                    {investigation.mode === 'mock'
+                      ? 'MOCK MODE · No live model'
+                      : 'OPENAI · Read-only'}
+                  </p>
+                  <p>{investigation.summary}</p>
+                  <h3>Evidence observations</h3>
+                  {investigation.facts.map((f) => (
+                    <p key={f.id}>
+                      {f.text}{' '}
+                      <a href={`#evidence-${f.evidenceId}`}>
+                        Evidence {f.evidenceId.slice(0, 8)}
+                      </a>
+                    </p>
+                  ))}
+                  <h3>Hypotheses — not confirmed causes</h3>
+                  {investigation.hypotheses.length ? (
+                    investigation.hypotheses.map((h) => (
+                      <p key={h.id}>
+                        {h.text}{' '}
+                        <a href={`#evidence-${h.evidenceId}`}>
+                          Evidence {h.evidenceId.slice(0, 8)}
+                        </a>
+                      </p>
+                    ))
+                  ) : (
+                    <p>
+                      No specific hypothesis is supported by these snapshots.
+                    </p>
+                  )}
+                  <h3>Missing information</h3>
+                  <ul>
+                    {investigation.missingInformation.map((m) => (
+                      <li key={m}>{m}</li>
+                    ))}
+                  </ul>
+                  <h3>Operator checks</h3>
+                  <ul>
+                    {investigation.operatorChecks.map((c) => (
+                      <li key={c}>{c}</li>
+                    ))}
+                  </ul>
+                </section>
+              )}
             </article>
           )}
           {tab !== 'Investigation' && (
@@ -536,6 +654,14 @@ function App() {
                 </div>
               )}
               <pre>{JSON.stringify(detail, null, 2)}</pre>
+              {detailType === 'incidents' &&
+                Array.isArray(detail.evidence) &&
+                detail.evidence.map((e: Row) => (
+                  <section id={`evidence-${e.id}`} key={label(e.id)}>
+                    <h3>Evidence {label(e.id)}</h3>
+                    <pre>{JSON.stringify(e, null, 2)}</pre>
+                  </section>
+                ))}
             </article>
           )}
           <footer>

@@ -2,7 +2,7 @@
 
 A synthetic payment soundbox monitoring and incident platform. No real money or bank integrations.
 
-**Status:** core API, worker, simulator and React console implemented and exercised against native PostgreSQL and Mosquitto. Unit, database/security, MQTT and 11 native recovery scenarios pass. Docker/WSL on the implementation host is unavailable, so container builds, the full container fault suite, backup restoration and the complete GenAI demonstration remain unverified. The GenAI implementation is deliberately deferred until the required reliability gate is met. See [PROGRESS.md](PROGRESS.md) and [test results](docs/test-results.md).
+**Status:** API, worker, durable simulator, React console and read-only investigation assistant are implemented. Verification passed: **16 unit tests, 25 real-service integration tests, and 18 container recovery/demo scenarios**, including database/broker outages and exact backup restoration. The assistant was implemented after the initial reliability gate passed. Its mock mode and real-provider contract are tested; live OpenAI execution is unverified. See [PROGRESS.md](PROGRESS.md) and [test results](docs/test-results.md) for exact executed checks and limits.
 
 ## Start locally
 
@@ -18,6 +18,10 @@ docker compose ps
 The setup command generates random credentials in ignored `.env`; it never replaces an existing file. Migration and seed are one-shot prerequisite services. Open http://localhost:5173 and sign in as `admin@cedar.test` with `SEED_PASSWORD` from your private `.env`. `reader@cedar.test` and `admin@harbor.test` use that same local seed password. There are two synthetic merchants; only Counter 01 has a simulator by default. Seed data contains **no invented payment successes**.
 
 No secrets are embedded in the development stack. The isolated test stack uses explicit test-only credentials. Never expose either stack to an untrusted network.
+
+If another application owns port 3000, add `API_PORT=53009` to `.env`; container-to-container addresses stay unchanged. `DASHBOARD_PORT=5174` similarly changes the browser port. For host-side demonstrations use `$env:API_URL='http://localhost:53009'` in PowerShell or `API_URL=http://localhost:53009 npm run demo` in Bash. Preserve other applications using those ports.
+
+The Investigation view defaults to **MOCK MODE**, generates deterministic cited observations and never calls a model. See [assistant configuration and security](docs/investigation.md) for the optional OpenAI adapter, usage bounds and limitations.
 
 For separate host processes, start only dependencies and seed:
 

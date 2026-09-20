@@ -23,6 +23,6 @@ Ordinary operator replay is limited to unexpired, uncompleted terminal dispatche
 
 ## Measurements
 
-Native-process recovery observations are recorded in [test results](test-results.md). No container recovery or backup restore result is claimed. The isolated container suite writes a JSON report with scenario duration, invariant, pass/fail and error when it can execute. Scenario duration includes failure injection and checks; it is **not** a pure recovery-time SLO or throughput benchmark.
+Native and container recovery observations are recorded in [test results](test-results.md), including an executed separate-database restore. The isolated container suite writes a JSON report with scenario duration, invariant, pass/fail and error. Scenario duration includes failure injection and checks; it is **not** a pure recovery-time SLO or throughput benchmark.
 
 Backups are consistent logical snapshots without continuous WAL archival. The potential data-loss window is all accepted writes after the snapshot; no scheduled backup interval or zero-RPO guarantee exists. Restore timing must be measured on the actual dataset and host. Backup files and restored databases are always separate from the running application database.
