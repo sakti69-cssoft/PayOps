@@ -107,6 +107,9 @@ label input {
   display: flex;
   flex-direction: column;
 }
+.shell > main {
+  min-width: 0;
+}
 .shell aside .logo {
   margin: 0 13px 29px;
 }
