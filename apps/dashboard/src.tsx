@@ -34,6 +34,8 @@ function App() {
   const [investigation, setInvestigation] = useState<Investigation | null>(
     null,
   );
+  const [parentTransactions, setParentTransactions] = useState<Row[]>([]);
+  const [parentSources, setParentSources] = useState<Row[]>([]);
   const [investigating, setInvestigating] = useState(false);
   const [investigationError, setInvestigationError] = useState('');
   const activeScope = useRef('');
@@ -63,8 +65,14 @@ function App() {
     const scope = activeScope.current;
     try {
       const prefix = `/merchants/${merchant}`;
-      const [p, d, i, a] = await Promise.all(
-        ['/payments', '/devices', '/incidents', '/audit'].map((path) =>
+      const [p, d, i, a, external] = await Promise.all(
+        [
+          '/payments',
+          '/devices',
+          '/incidents',
+          '/audit',
+          '/parent-transactions',
+        ].map((path) =>
           request(prefix + path + `?limit=25&offset=${page * 25}`),
         ),
       );
@@ -73,6 +81,8 @@ function App() {
       setDevices(d);
       setIncidents(i);
       setAudit(a);
+      setParentTransactions(external.items);
+      setParentSources(external.sources);
       setError('');
       setUpdated(new Date().toLocaleTimeString());
     } catch (e) {
@@ -85,6 +95,8 @@ function App() {
     setDevices([]);
     setIncidents([]);
     setAudit([]);
+    setParentTransactions([]);
+    setParentSources([]);
     setDetail(null);
     setInvestigation(null);
     setInvestigationError('');
@@ -108,6 +120,8 @@ function App() {
     setDevices([]);
     setIncidents([]);
     setAudit([]);
+    setParentTransactions([]);
+    setParentSources([]);
     setDetail(null);
     setLoading(true);
     void refresh().finally(() => setLoading(false));
@@ -280,6 +294,7 @@ function App() {
             'Failed announcements',
             'Audit history',
             'Investigation',
+            'Parent platform',
           ].map((t, i) => (
             <button
               key={t}
@@ -292,7 +307,7 @@ function App() {
                 setInvestigationError('');
               }}
             >
-              <span>{['▦', '↗', '▣', '◉', '↻', '≡', '✧'][i]}</span>
+              <span>{['▦', '↗', '▣', '◉', '↻', '≡', '✧', '⇄'][i]}</span>
               {t}
               {t === 'Incidents' && <b>{incidents.length}</b>}
             </button>
@@ -335,6 +350,71 @@ function App() {
             </div>
           )}
           {loading && <p role="status">Loading your workspace…</p>}
+          {tab === 'Parent platform' && (
+            <article className="panel">
+              <div className="panel-heading">
+                <h2>Cloud-Native Payment Soundbox Platform</h2>
+              </div>
+              <p>
+                Read-only observations from the parent application. Publication
+                does not prove audio playback. No announcements are sent from
+                this view.
+              </p>
+              {!parentSources.length && (
+                <p>
+                  No parent connection configured. Follow the parent integration
+                  guide to connect a merchant.
+                </p>
+              )}
+              {parentSources.map((source) => (
+                <p key={label(source.id)}>
+                  {label(source.id)}: {label(source.sync_status)} · Last
+                  complete check: {date(source.last_success_at)}
+                  {(!source.last_success_at ||
+                    Date.now() - Date.parse(String(source.last_success_at)) >
+                      60000) &&
+                    ' · Observations may be stale'}
+                </p>
+              ))}
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Reference</th>
+                      <th>Amount</th>
+                      <th>Payment</th>
+                      <th>Parent announcement</th>
+                      <th>Last observed</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {parentTransactions.map((t) => (
+                      <tr key={label(t.id)}>
+                        <td>
+                          {label(t.reference)}
+                          <small>
+                            {label(t.source_id)} · {label(t.parent_id)}
+                          </small>
+                        </td>
+                        <td>INR {(Number(t.amount_minor) / 100).toFixed(2)}</td>
+                        <td>{label(t.payment_status)}</td>
+                        <td>{label(t.announcement_status)}</td>
+                        <td>{date(t.observed_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {!parentTransactions.length && (
+                <p>No imported parent transactions on this page.</p>
+              )}
+              <p>
+                Pending publication incidents appear under Incidents and
+                Investigation. Parent records are separate from PayOps device
+                completions.
+              </p>
+            </article>
+          )}
           {tab === 'Overview' && (
             <>
               <div className="metrics">
