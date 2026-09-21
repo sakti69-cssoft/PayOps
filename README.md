@@ -2,6 +2,8 @@
 
 A synthetic payment soundbox monitoring and incident platform. No real money or bank integrations.
 
+PayOps is the child monitoring project of [Cloud-Native Payment Soundbox Platform](https://github.com/sakti69-cssoft/Cloud-Native-Payment-Soundbox-Platform). The optional [parent monitoring connection](docs/parent-integration.md) imports transaction observations into a separate dashboard view and creates cited publication incidents without sending duplicate announcements. Configure it explicitly and run `npm run parent:sync`.
+
 **Status:** API, worker, durable simulator, React console and read-only investigation assistant are implemented. Verification passed: **16 unit tests, 25 real-service integration tests, and 18 container recovery/demo scenarios**, including database/broker outages and exact backup restoration. The assistant was implemented after the initial reliability gate passed. Its mock mode and real-provider contract are tested; live OpenAI execution is unverified. See [PROGRESS.md](PROGRESS.md) and [test results](docs/test-results.md) for exact executed checks and limits.
 
 ## Start locally

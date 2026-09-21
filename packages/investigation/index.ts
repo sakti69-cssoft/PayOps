@@ -64,6 +64,35 @@ export function evidenceContext(evidence: Evidence[]): Context {
       );
       continue;
     }
+    if (s.parent) {
+      const parent = record(s.parent);
+      if (
+        ['PENDING', 'SUCCESS', 'FAILED'].includes(String(parent.paymentStatus))
+      )
+        add(
+          'parentPayment',
+          `Parent payment status at capture: ${parent.paymentStatus}.`,
+        );
+      if (
+        ['PENDING', 'PUBLISHED', 'DELIVERED', 'FAILED'].includes(
+          String(parent.announcementStatus),
+        )
+      )
+        add(
+          'parentAnnouncement',
+          `Parent announcement status at capture: ${parent.announcementStatus}.`,
+        );
+      const created = timestamp(parent.createdAt);
+      if (created)
+        add('parentCreated', `Parent transaction created at ${created}.`);
+      context.missingInformation.push(
+        'The parent API reports publication state without signed device receipts. Neither PUBLISHED nor DELIVERED establishes verified audio playback.',
+      );
+      context.operatorChecks.push(
+        'Inspect the parent API and MQTT broker logs. This connection only observes transactions and cannot replay announcements.',
+      );
+      continue;
+    }
     const command = record(s.command);
     if (
       ['pending', 'published', 'completed', 'expired', 'unknown'].includes(

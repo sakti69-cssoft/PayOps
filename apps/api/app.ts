@@ -191,6 +191,19 @@ export function createApp(
     );
     res.status(result.duplicate ? 200 : 201).json(result);
   });
+  app.get(base + '/parent-transactions', async (req, res) => {
+    const p = page(req);
+    const rows = await pool.query(
+      `SELECT t.* FROM parent_transactions t JOIN parent_sources s ON s.id=t.source_id
+       WHERE s.merchant_id=$1 ORDER BY t.parent_created_at DESC,t.id LIMIT $2 OFFSET $3`,
+      [res.locals.merchantId, p.limit, p.offset],
+    );
+    const sources = await pool.query(
+      'SELECT id,last_attempt_at,last_success_at,sync_status FROM parent_sources WHERE merchant_id=$1 ORDER BY id',
+      [res.locals.merchantId],
+    );
+    res.json({ items: rows.rows, sources: sources.rows });
+  });
   app.get(base + '/payments', async (req, res) => {
     const p = page(req);
     res.json(

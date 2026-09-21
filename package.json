@@ -23,6 +23,7 @@
     "seed": "node --env-file-if-exists=.env --import tsx scripts/seed.ts",
     "setup": "node scripts/setup.mjs",
     "demo": "node --env-file-if-exists=.env --import tsx scripts/demo.ts",
+    "parent:sync": "node --env-file-if-exists=.env --import tsx scripts/parent-sync.ts",
     "integration": "node --import tsx scripts/integration.ts",
     "backup": "node scripts/backup.mjs",
     "restore": "node scripts/restore.mjs"
